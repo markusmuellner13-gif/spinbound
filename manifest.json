@@ -1,0 +1,17 @@
+{
+  "name": "Spinbound — Roguelike Slot Machine",
+  "short_name": "Spinbound",
+  "description": "A roguelike slot machine. Build broken symbol synergies, beat the rising rent, chase the high score. Play-money only — no real-world value.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0a1a",
+  "theme_color": "#0b0a1a",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

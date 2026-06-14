@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0a1a" />
+  <meta name="description" content="SPINBOUND — a roguelike slot machine. Build broken symbol synergies, beat the rent, chase the high score. Play-money only." />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Spinbound" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <title>SPINBOUND — Roguelike Slot Machine</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ===== TITLE SCREEN ===== -->
+    <section id="screen-title" class="screen active">
+      <div class="title-wrap">
+        <h1 class="logo">SPIN<span>BOUND</span></h1>
+        <p class="tagline">Roguelike slot machine</p>
+
+        <div class="title-buttons">
+          <button id="btn-play" class="btn btn-big">▶ PLAY</button>
+          <button id="btn-how" class="btn btn-ghost">How to play</button>
+        </div>
+
+        <div class="title-stats">
+          <div><span class="k">Best floor</span><span id="stat-best-floor" class="v">—</span></div>
+          <div><span class="k">Best payout</span><span id="stat-best-coins" class="v">—</span></div>
+          <div><span class="k">Runs</span><span id="stat-runs" class="v">0</span></div>
+        </div>
+
+        <p class="disclaimer">
+          Play-money only. Coins exist solely inside this game, have <b>no monetary value</b>,
+          cannot be bought, sold, cashed out, or transferred. No real-money gambling.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== GAME SCREEN ===== -->
+    <section id="screen-game" class="screen">
+      <header class="hud">
+        <div class="hud-cell">
+          <span class="hud-k">FLOOR</span>
+          <span id="hud-floor" class="hud-v">1</span>
+        </div>
+        <div class="hud-cell">
+          <span class="hud-k">SPINS LEFT</span>
+          <span id="hud-spins" class="hud-v">5</span>
+        </div>
+        <div class="hud-cell hud-rent">
+          <span class="hud-k">RENT</span>
+          <span id="hud-rent" class="hud-v">25</span>
+        </div>
+        <div class="hud-cell">
+          <span class="hud-k">COINS</span>
+          <span id="hud-coins" class="hud-v">0</span>
+        </div>
+      </header>
+
+      <div class="rent-bar">
+        <div id="rent-fill" class="rent-fill"></div>
+        <span id="rent-bar-label" class="rent-bar-label">0 / 25</span>
+      </div>
+
+      <main class="board-wrap">
+        <div id="grid" class="grid" aria-label="slot grid"></div>
+        <div id="float-layer" class="float-layer"></div>
+      </main>
+
+      <div id="readout" class="readout">Spin to start the floor.</div>
+
+      <footer class="game-actions">
+        <button id="btn-spin" class="btn btn-spin">SPIN</button>
+      </footer>
+    </section>
+
+    <!-- ===== SHOP SCREEN ===== -->
+    <section id="screen-shop" class="screen">
+      <div class="shop-wrap">
+        <h2 class="shop-title">DRAFT A SYMBOL</h2>
+        <p class="shop-sub">Add one to your bag — or skip for <b>+5</b> coins.</p>
+        <div id="shop-cards" class="shop-cards"></div>
+        <div class="shop-foot">
+          <button id="btn-skip" class="btn btn-ghost">Skip (+5 coins)</button>
+          <button id="btn-bag" class="btn btn-ghost">View bag</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== GAME OVER ===== -->
+    <section id="screen-over" class="screen">
+      <div class="over-wrap">
+        <h2 class="over-title">EVICTED</h2>
+        <p class="over-sub" id="over-sub">You couldn't make rent.</p>
+        <div class="over-stats">
+          <div><span class="k">Floor reached</span><span id="over-floor" class="v">1</span></div>
+          <div><span class="k">Best payout</span><span id="over-coins" class="v">0</span></div>
+        </div>
+        <div id="over-record" class="over-record hidden">★ NEW RECORD ★</div>
+        <button id="btn-retry" class="btn btn-big">▶ NEW RUN</button>
+        <button id="btn-home" class="btn btn-ghost">Main menu</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== MODAL (bag / how-to) ===== -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <button id="modal-close" class="modal-close" aria-label="close">✕</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="symbols.js"></script>
+  <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
