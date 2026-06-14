@@ -137,10 +137,17 @@ const SYMBOLS = {
   multiplier: {
     id: 'multiplier', name: 'Multiplier', emoji: '✖️', rarity: 'rare', base: 0,
     desc: 'Pays nothing alone, but DOUBLES the payout of every adjacent symbol.',
-    onScore(ctx) {
+    onAura(ctx) {
       ctx.neighbours().forEach(c => c._mult = (c._mult || 1) * 2);
     },
-    isAura: true, // resolves before normal scoring
+  },
+  gift: {
+    id: 'gift', name: 'Gift Box', emoji: '🎁', rarity: 'rare', base: 2,
+    desc: 'Pays 2. 25% chance to permanently drop a free Coin into your bag.',
+    onScore(ctx) {
+      ctx.add(2);
+      if (ctx.rng() < 0.25) { ctx.addToBag('coin'); ctx.note('🪙 +bag'); }
+    },
   },
   hoard: {
     id: 'hoard', name: 'Dragon Hoard', emoji: '🐉', rarity: 'rare', base: 3,
@@ -199,6 +206,32 @@ const SYMBOLS = {
     desc: 'Pays 6. The first time you would be evicted each run, it revives you instead.',
     onScore(ctx) { ctx.add(6); },
     revive: true,
+  },
+  midas: {
+    id: 'midas', name: 'Midas Touch', emoji: '👑', rarity: 'legend', base: 6,
+    desc: 'Pays 6 AND gives +4 coins to every symbol touching it.',
+    onAura(ctx) { ctx.neighbours().forEach(c => c._bonus = (c._bonus || 0) + 4); },
+    onScore(ctx) { ctx.add(6); },
+  },
+  lightning: {
+    id: 'lightning', name: 'Lightning', emoji: '⚡', rarity: 'legend', base: 2,
+    desc: 'Pays 2 and TRIPLES the payout of one random neighbour.',
+    onAura(ctx) {
+      const ns = ctx.neighbours();
+      if (ns.length) {
+        const t = ns[Math.floor(ctx.rng() * ns.length)];
+        t._mult = (t._mult || 1) * 3;
+      }
+    },
+    onScore(ctx) { ctx.add(2); },
+  },
+  rainbow: {
+    id: 'rainbow', name: 'Rainbow', emoji: '🌈', rarity: 'legend', base: 3,
+    desc: 'Pays 3 for every different KIND of symbol on the grid at once.',
+    onScore(ctx) {
+      const kinds = new Set(ctx.grid.filter(c => c).map(c => c.sym.id)).size;
+      ctx.add(kinds * 3, `${kinds} kinds`);
+    },
   },
 };
 

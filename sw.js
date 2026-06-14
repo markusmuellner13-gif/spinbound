@@ -1,5 +1,5 @@
 /* SPINBOUND service worker — offline-capable PWA */
-const CACHE = 'spinbound-v1';
+const CACHE = 'spinbound-v2';
 const ASSETS = [
   './',
   './index.html',

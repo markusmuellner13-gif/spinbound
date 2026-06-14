@@ -27,6 +27,9 @@
     overSub: $('#over-sub'), overRecord: $('#over-record'),
     toast: $('#toast'),
     statBestFloor: $('#stat-best-floor'), statBestCoins: $('#stat-best-coins'), statRuns: $('#stat-runs'),
+    statDaily: $('#stat-daily'),
+    lever: $('#lever'), coach: $('#coach'), mute: $('#btn-mute'),
+    modeTag: $('#mode-tag'), bgFloat: $('#bg-float'),
   };
 
   /* ---------- persistent meta ---------- */
@@ -35,12 +38,18 @@
     catch { return {}; }
   }
   function saveMeta(m) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(m)); } catch {} }
-  let meta = Object.assign({ bestFloor: 0, bestCoins: 0, runs: 0 }, loadMeta());
+  let meta = Object.assign(
+    { bestFloor: 0, bestCoins: 0, runs: 0, muted: false, seenTutorial: false, daily: {} },
+    loadMeta()
+  );
 
   /* ---------- run state ---------- */
   let S = null;
-  function newRun() {
+  function newRun(mode) {
+    const daily = mode === 'daily';
+    rngFn = daily ? mulberry32(dailySeed()) : Math.random;
     S = {
+      mode: daily ? 'daily' : 'normal',
       floor: 1,
       spinsLeft: SPINS_PER_FLOOR,
       coins: 0,
@@ -49,6 +58,7 @@
       banked: 0,           // total coins earned this run (for hoard etc.)
       bestPayout: 0,
       phoenixUsed: false,
+      rerolls: 0,          // shop rerolls used this floor (price escalates)
       lastGrid: null,
       spinning: false,
     };
@@ -66,8 +76,63 @@
     screens[name].classList.add('active');
   }
 
-  /* ---------- RNG ---------- */
-  const rng = () => Math.random();
+  /* ---------- RNG (swappable for daily seed) ---------- */
+  let rngFn = Math.random;
+  const rng = () => rngFn();
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function dailyKey() {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+  function dailySeed() {
+    const s = dailyKey();
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  /* ---------- sound (Web Audio, no asset files) + haptics ---------- */
+  let audioCtx = null;
+  function ac() {
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+  }
+  function tone(freq, dur, type, vol, when) {
+    const c = ac(); if (!c) return;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type || 'square'; o.frequency.value = freq;
+    o.connect(g); g.connect(c.destination);
+    const t = c.currentTime + (when || 0);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function sfx(name) {
+    if (meta.muted) return;
+    switch (name) {
+      case 'tick':   tone(180 + rng() * 90, 0.05, 'square', 0.05); break;
+      case 'spin':   for (let i = 0; i < 7; i++) tone(260 + i * 35, 0.05, 'square', 0.045, i * 0.05); break;
+      case 'win':    [523, 659, 784].forEach((f, i) => tone(f, 0.16, 'triangle', 0.11, i * 0.05)); break;
+      case 'bigwin': [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, 0.22, 'triangle', 0.13, i * 0.06)); break;
+      case 'rent':   [392, 523, 659, 880].forEach((f, i) => tone(f, 0.18, 'sawtooth', 0.1, i * 0.07)); break;
+      case 'evict':  [392, 294, 233, 175].forEach((f, i) => tone(f, 0.3, 'sawtooth', 0.13, i * 0.12)); break;
+      case 'click':  tone(620, 0.05, 'square', 0.07); break;
+      case 'buy':    tone(784, 0.08, 'triangle', 0.1); tone(1175, 0.1, 'triangle', 0.1, 0.06); break;
+    }
+  }
+  function haptic(pattern) {
+    if (meta.muted) return;
+    if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch {} }
+  }
 
   /* ---------- grid fill ---------- */
   function rollGrid() {
@@ -120,20 +185,19 @@
       }
     });
 
-    // 2) aura effects (multiplier) — set _mult flags on neighbours
+    // 2) aura effects — set _mult / _bonus flags on neighbours before scoring
     grid.forEach(cell => {
-      if (!cell || !cell.sym.isAura) return;
-      const ctx = makeCtx(cell);
-      cell.sym.onScore(ctx);
+      if (!cell || !cell.sym.onAura || destroyed.has(cell.idx)) return;
+      cell.sym.onAura(makeCtx(cell));
     });
 
     // 3) normal scoring
     grid.forEach(cell => {
-      if (!cell || cell.sym.isAura || destroyed.has(cell.idx)) return;
+      if (!cell || destroyed.has(cell.idx) || !cell.sym.onScore) return;
       const ctx = makeCtx(cell);
       cell._pay = 0;
       cell.sym.onScore(ctx);
-      let pay = cell._pay * (cell._mult || 1);
+      let pay = (cell._pay + (cell._bonus || 0)) * (cell._mult || 1);
       if (pay !== 0) {
         total += pay;
         events.push({ idx: cell.idx, text: '+' + pay, kind: 'pay' });
@@ -161,6 +225,7 @@
           cell._pay = (cell._pay || 0) + n;
           if (note) events.push({ idx: cell.idx, text: note, kind: 'note' });
         },
+        note(text) { events.push({ idx: cell.idx, text, kind: 'note' }); },
         mult(x) { cell._mult = (cell._mult || 1) * x; },
         destroy(target) {
           destroyed.add(target.idx);
@@ -168,6 +233,7 @@
           return target.sym;
         },
         consumeFromBag(sym) { consumed.push(sym); },
+        addToBag(id) { S.bag.push(cloneSym(id)); },
       };
     }
 
@@ -227,11 +293,18 @@
   }
 
   /* ---------- the spin ---------- */
+  function pullLever() {
+    el.lever.classList.remove('pulled'); void el.lever.offsetWidth; el.lever.classList.add('pulled');
+  }
+
   async function doSpin() {
     if (S.spinning || S.spinsLeft <= 0) return;
+    hideCoach();
     S.spinning = true;
     el.spinBtn.disabled = true;
     el.readout.textContent = 'Spinning…';
+    pullLever();
+    sfx('spin'); haptic(30);
 
     // animate a few random frames
     for (let f = 0; f < 7; f++) {
@@ -246,6 +319,8 @@
     const result = scoreGrid(grid);
     renderGrid(grid, result);
     popFloats(result.events);
+    result.events.filter(e => e.kind === 'pay').slice(0, 14)
+      .forEach((e, i) => setTimeout(() => sfx('tick'), 140 + i * 55));
 
     await wait(150 + Math.min(result.events.length, 18) * 55 + 250);
 
@@ -263,9 +338,20 @@
     S.spinsLeft--;
     syncHUD();
     bumpCoins();
+
+    if (result.total >= 40 || result.globalMult > 1) { sfx('bigwin'); haptic([0, 40, 40, 80]); }
+    else if (result.total > 0) { sfx('win'); haptic(20); }
+
     el.readout.textContent = result.total > 0
       ? `+${result.total} coins!` + (result.globalMult > 1 ? `  (×${result.globalMult})` : '')
       : 'No win this spin.';
+
+    // urgency hint when rent is close and spins are running out
+    if (S.spinsLeft > 0 && S.coins < S.rent) {
+      const need = S.rent - S.coins;
+      if (S.spinsLeft === 1) el.readout.textContent += `  ⚠ LAST SPIN — need ${need} more!`;
+      else el.readout.textContent += `  · ${need} to go in ${S.spinsLeft} spins`;
+    }
 
     saveMeta(meta);
 
@@ -283,6 +369,7 @@
     if (S.coins >= S.rent) {
       S.coins -= S.rent;
       syncHUD();
+      sfx('rent'); haptic([0, 30, 30, 30]);
       toast(`Rent paid! Floor ${S.floor} cleared.`);
       openShop();
     } else {
@@ -291,6 +378,7 @@
       if (hasPhoenix && !S.phoenixUsed) {
         S.phoenixUsed = true;
         // rent forgiven this once — keep current coins, advance
+        sfx('bigwin'); haptic([0, 60, 40, 60]);
         toast('🔥 Phoenix revives you! Rent forgiven.');
         openShop();
       } else {
@@ -315,9 +403,9 @@
     return chosen;
   }
 
-  function openShop() {
-    S.spinning = false;
-    const choices = rollShopChoices(3);
+  function rerollCost() { return 3 + S.rerolls * 3; }
+
+  function renderShop(choices) {
     el.shopCards.innerHTML = '';
     choices.forEach(id => {
       const def = SYMBOLS[id];
@@ -332,11 +420,28 @@
         <div class="sc-take">+ ADD TO BAG</div>`;
       card.addEventListener('click', () => {
         S.bag.push(cloneSym(id));
+        sfx('buy'); haptic(25);
         toast(`${def.emoji} ${def.name} added to your bag.`);
         nextFloor();
       });
       el.shopCards.appendChild(card);
     });
+    syncShopButtons();
+  }
+
+  function syncShopButtons() {
+    const cost = rerollCost();
+    const btn = $('#btn-reroll');
+    if (btn) {
+      btn.textContent = `🎲 Reroll (${cost})`;
+      btn.disabled = S.coins < cost;
+    }
+  }
+
+  function openShop() {
+    S.spinning = false;
+    S.rerolls = 0;
+    renderShop(rollShopChoices(3));
     show('shop');
   }
 
@@ -345,7 +450,7 @@
     S.spinsLeft = SPINS_PER_FLOOR;
     S.rent = rentForFloor(S.floor);
     syncHUD();
-    el.readout.textContent = `Floor ${S.floor} — make rent in ${SPINS_PER_FLOOR} spins!`;
+    el.readout.textContent = `Floor ${S.floor} — pay ${S.rent} within ${SPINS_PER_FLOOR} spins!`;
     renderGrid(new Array(CELLS).fill(null));
     el.spinBtn.disabled = false;
     show('game');
@@ -353,15 +458,37 @@
 
   /* ---------- game over ---------- */
   function gameOver() {
+    sfx('evict'); haptic([0, 80, 50, 80, 50, 120]);
     let record = false;
     if (S.floor > (meta.bestFloor || 0)) { meta.bestFloor = S.floor; record = true; }
     if (S.bestPayout > (meta.bestCoins || 0)) { meta.bestCoins = S.bestPayout; record = true; }
+    if (S.mode === 'daily') {
+      const k = dailyKey();
+      if (!meta.daily || meta.daily.date !== k) meta.daily = { date: k, bestFloor: 0 };
+      if (S.floor > meta.daily.bestFloor) meta.daily.bestFloor = S.floor;
+    }
     saveMeta(meta);
     el.overFloor.textContent = S.floor;
     el.overCoins.textContent = S.bestPayout;
-    el.overSub.textContent = `You needed ${S.rent} but had ${S.coins}.`;
+    el.overSub.textContent = `You needed ${S.rent} but had only ${S.coins}.`;
     el.overRecord.classList.toggle('hidden', !record);
     show('over');
+  }
+
+  /* ---------- coach (auto-dismiss info card) ---------- */
+  let coachTimer;
+  function showCoach(html, ms) {
+    el.coach.innerHTML = html + '<div class="coach-tap">tap to dismiss</div>';
+    el.coach.classList.remove('hidden');
+    void el.coach.offsetWidth;
+    el.coach.classList.add('show');
+    clearTimeout(coachTimer);
+    if (ms) coachTimer = setTimeout(hideCoach, ms);
+  }
+  function hideCoach() {
+    clearTimeout(coachTimer);
+    el.coach.classList.remove('show');
+    setTimeout(() => el.coach.classList.add('hidden'), 350);
   }
 
   /* ---------- helpers ---------- */
@@ -403,9 +530,10 @@
       <h3 class="modal-h">HOW TO PLAY</h3>
       <div class="how">
         <p><b>SPINBOUND</b> is a roguelike slot machine. Every <b>${SPINS_PER_FLOOR} spins</b> you owe <b>rent</b> that climbs each floor. Bank enough coins to pay it or you're <b>evicted</b> — that ends the run.</p>
-        <p>🎰 <b>Spin</b> fills the 5×4 grid with random symbols from <b>your bag</b>. Symbols pay coins and combo off their neighbours.</p>
-        <p>🛒 After clearing a floor, <b>draft a new symbol</b> into your bag. Stack synergies to build an unstoppable machine.</p>
-        <p>🧠 Think in combos: Multipliers ✖️ next to Diamonds 💎, Cats 🐱 hunting Mice 🐭, three Sevens 7️⃣, a Jackpot 🎰 row…</p>
+        <p>🎰 <b>Spin</b> (button or <b>pull the lever</b>) fills the 5×4 grid with random symbols from <b>your bag</b>. Symbols pay coins and combo off their neighbours.</p>
+        <p>🛒 After clearing a floor, <b>draft a new symbol</b> into your bag — or 🎲 <b>reroll</b> the offer for coins, or skip for +5. Stack synergies to build an unstoppable machine.</p>
+        <p>🧠 Think in combos: Multipliers ✖️ and Lightning ⚡ on Diamonds 💎, Midas 👑 buffing everything around it, Cats 🐱 hunting Mice 🐭, three Sevens 7️⃣, a Jackpot 🎰 row…</p>
+        <p>🗓 <b>Daily Seed</b> gives everyone the same symbols & shops for the day — compete for the deepest floor.</p>
         <p class="how-note">Coins are play-money. They have no real-world value and cannot be cashed out. This is a game of skill and luck, not real-money gambling.</p>
       </div>`);
   }
@@ -415,27 +543,95 @@
     el.statBestFloor.textContent = meta.bestFloor || '—';
     el.statBestCoins.textContent = meta.bestCoins || '—';
     el.statRuns.textContent = meta.runs || 0;
+    if (el.statDaily) {
+      const d = meta.daily && meta.daily.date === dailyKey() ? meta.daily.bestFloor : 0;
+      el.statDaily.textContent = d ? `F${d}` : '—';
+    }
+  }
+
+  /* ---------- mute ---------- */
+  function syncMute() {
+    el.mute.textContent = meta.muted ? '🔇' : '🔊';
+    el.mute.classList.toggle('muted', meta.muted);
+  }
+
+  /* ---------- background floaters ---------- */
+  function buildBackground() {
+    if (!el.bgFloat) return;
+    const glyphs = ['🍒', '🪙', '💎', '🍀', '7️⃣', '🔔', '⭐', '🎰', '👑'];
+    const n = 14;
+    let html = '';
+    for (let i = 0; i < n; i++) {
+      const g = glyphs[Math.floor(Math.random() * glyphs.length)];
+      const left = Math.random() * 100;
+      const dur = 14 + Math.random() * 16;
+      const delay = -Math.random() * dur;
+      const size = 18 + Math.random() * 28;
+      html += `<span class="floater" style="left:${left}%;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s">${g}</span>`;
+    }
+    el.bgFloat.innerHTML = html;
   }
 
   /* ---------- wire up ---------- */
-  $('#btn-play').addEventListener('click', startRun);
-  $('#btn-retry').addEventListener('click', startRun);
-  $('#btn-home').addEventListener('click', () => { syncTitle(); show('title'); });
-  $('#btn-how').addEventListener('click', howToPlay);
+  $('#btn-play').addEventListener('click', () => startRun('normal'));
+  $('#btn-daily').addEventListener('click', () => startRun('daily'));
+  $('#btn-retry').addEventListener('click', () => startRun(S ? S.mode : 'normal'));
+  $('#btn-home').addEventListener('click', () => { sfx('click'); syncTitle(); show('title'); });
+  $('#btn-how').addEventListener('click', () => { sfx('click'); howToPlay(); });
   $('#btn-spin').addEventListener('click', doSpin);
-  $('#btn-bag').addEventListener('click', showBag);
-  $('#btn-skip').addEventListener('click', () => { S.coins += 5; toast('Skipped — +5 coins.'); nextFloor(); });
+  $('#btn-bag').addEventListener('click', () => { sfx('click'); showBag(); });
+  $('#btn-skip').addEventListener('click', () => {
+    S.coins += 5; sfx('buy'); haptic(20); toast('Skipped — +5 coins.'); nextFloor();
+  });
+  $('#btn-reroll').addEventListener('click', () => {
+    const cost = rerollCost();
+    if (S.coins < cost) return;
+    S.coins -= cost; S.rerolls++;
+    sfx('click'); haptic(15);
+    renderShop(rollShopChoices(3));
+    toast(`Rerolled for ${cost} coins.`);
+  });
+  el.mute.addEventListener('click', () => {
+    meta.muted = !meta.muted; saveMeta(meta); syncMute();
+    if (!meta.muted) sfx('click');
+  });
+  el.lever.addEventListener('click', doSpin);
+  el.coach.addEventListener('click', hideCoach);
 
-  function startRun() {
-    newRun();
-    syncHUD();
+  function startRun(mode) {
+    sfx('click');
+    newRun(mode);
+    syncHUD(); syncMute();
+    el.modeTag.textContent = S.mode === 'daily' ? `🗓 DAILY · ${dailyKey()}` : '';
+    el.modeTag.classList.toggle('hidden', S.mode !== 'daily');
     renderGrid(new Array(CELLS).fill(null));
-    el.readout.textContent = `Floor 1 — make ${S.rent} coins in ${SPINS_PER_FLOOR} spins!`;
+    el.readout.textContent = `Floor 1 — pay ${S.rent} coins within ${SPINS_PER_FLOOR} spins!`;
     el.spinBtn.disabled = false;
     show('game');
+
+    // onboarding coach: full tutorial first time, short reminder afterwards
+    if (!meta.seenTutorial) {
+      showCoach(
+        `<div class="coach-h">🎯 HOW TO WIN</div>
+         <p>Hit <b>SPIN</b> (or pull the lever ➡) to fill the grid from <b>your bag</b>.</p>
+         <p>Symbols pay 🪙 coins and <b>combo with their neighbours</b>.</p>
+         <p>Every <b>${SPINS_PER_FLOOR} spins</b> you owe <b>RENT</b> (top bar). Miss it and you're evicted!</p>
+         <p>Clear a floor → <b>draft a new symbol</b> and build a synergy machine.</p>`,
+        12000
+      );
+      meta.seenTutorial = true; saveMeta(meta);
+    } else {
+      showCoach(
+        `<div class="coach-h">🎯 Floor 1</div>
+         <p>Bank <b>${S.rent} coins</b> in <b>${SPINS_PER_FLOOR} spins</b> to pay rent.</p>`,
+        5000
+      );
+    }
   }
 
   /* ---------- boot ---------- */
+  buildBackground();
   syncTitle();
+  syncMute();
   show('title');
 })();

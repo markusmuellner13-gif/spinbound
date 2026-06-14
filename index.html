@@ -18,6 +18,13 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- animated casino background -->
+  <div id="bg" class="bg" aria-hidden="true">
+    <div class="bg-aurora"></div>
+    <div class="bg-grid"></div>
+    <div id="bg-float" class="bg-float"></div>
+  </div>
+
   <div id="app">
     <!-- ===== TITLE SCREEN ===== -->
     <section id="screen-title" class="screen active">
@@ -27,12 +34,14 @@
 
         <div class="title-buttons">
           <button id="btn-play" class="btn btn-big">▶ PLAY</button>
+          <button id="btn-daily" class="btn btn-ghost">🗓 Daily Seed</button>
           <button id="btn-how" class="btn btn-ghost">How to play</button>
         </div>
 
         <div class="title-stats">
           <div><span class="k">Best floor</span><span id="stat-best-floor" class="v">—</span></div>
           <div><span class="k">Best payout</span><span id="stat-best-coins" class="v">—</span></div>
+          <div><span class="k">Daily best</span><span id="stat-daily" class="v">—</span></div>
           <div><span class="k">Runs</span><span id="stat-runs" class="v">0</span></div>
         </div>
 
@@ -40,12 +49,16 @@
           Play-money only. Coins exist solely inside this game, have <b>no monetary value</b>,
           cannot be bought, sold, cashed out, or transferred. No real-money gambling.
         </p>
-        <p class="version">v1.0.1</p>
+        <p class="version">v1.1.0</p>
       </div>
     </section>
 
     <!-- ===== GAME SCREEN ===== -->
     <section id="screen-game" class="screen">
+      <div class="topbar">
+        <span id="mode-tag" class="mode-tag hidden"></span>
+        <button id="btn-mute" class="btn-mute" aria-label="toggle sound">🔊</button>
+      </div>
       <header class="hud">
         <div class="hud-cell">
           <span class="hud-k">FLOOR</span>
@@ -72,7 +85,14 @@
 
       <main class="board-wrap">
         <div id="grid" class="grid" aria-label="slot grid"></div>
+        <!-- slot-machine lever -->
+        <div id="lever" class="lever" role="button" aria-label="pull to spin">
+          <div class="lever-rod"></div>
+          <div class="lever-knob"></div>
+        </div>
         <div id="float-layer" class="float-layer"></div>
+        <!-- auto-dismissing coach / info card -->
+        <div id="coach" class="coach hidden"></div>
       </main>
 
       <div id="readout" class="readout">Spin to start the floor.</div>
@@ -89,6 +109,7 @@
         <p class="shop-sub">Add one to your bag — or skip for <b>+5</b> coins.</p>
         <div id="shop-cards" class="shop-cards"></div>
         <div class="shop-foot">
+          <button id="btn-reroll" class="btn btn-ghost">🎲 Reroll (3)</button>
           <button id="btn-skip" class="btn btn-ghost">Skip (+5 coins)</button>
           <button id="btn-bag" class="btn btn-ghost">View bag</button>
         </div>

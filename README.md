@@ -6,11 +6,18 @@
 
 ## How to play
 
-1. **Spin** fills the grid with random symbols drawn from *your bag*.
-2. Symbols pay coins and **combo off their neighbours** (Multipliers double adjacent symbols, Cats eat Mice, three Sevens explode, a Jackpot row doubles the whole board…).
+1. **Spin** — tap the button *or pull the lever* — fills the grid with random symbols drawn from *your bag*.
+2. Symbols pay coins and **combo off their neighbours** (Multipliers ✖️ & Lightning ⚡ scale adjacent symbols, Midas 👑 buffs everything around it, Cats 🐱 eat Mice 🐭, three Sevens 7️⃣ explode, a Jackpot 🎰 row doubles the whole board…).
 3. Every **5 spins** you owe **rent**. Make it or you're **evicted** — that ends the run.
-4. Clear a floor → **draft a new symbol** into your bag. Stack synergies into an unstoppable machine.
+4. Clear a floor → **draft a new symbol** into your bag, **🎲 reroll** the offer for coins, or skip for +5. Stack synergies into an unstoppable machine.
 5. Rent climbs every floor. How deep can you go?
+
+### Modes & feel
+- **23 symbols** across 4 rarities (common → legendary) for deep, replayable synergy-building.
+- **🗓 Daily Seed** — everyone gets the same symbols & shops each day; compete for the deepest floor.
+- **Synthesized sound + haptics** (Web Audio, zero asset files) with a one-tap mute.
+- **Auto-dismissing coach cards** teach the goal, rent timing, and combos as you play.
+- Animated **slot-machine lever**, drifting neon background, juicy payout pops.
 
 ## Install as an app
 
