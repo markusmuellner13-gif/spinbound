@@ -25,10 +25,11 @@ const SYMBOLS = {
   /* ---------- COMMONS ---------- */
   cherry: {
     id: 'cherry', name: 'Cherry', emoji: '🍒', rarity: 'common', base: 1,
-    desc: 'Pays 1. +1 more for every other Cherry on the grid.',
+    desc: 'Pays 1. +1 more for every other Cherry on the grid (up to +3).',
     onScore(ctx) {
       ctx.add(1);
-      const extra = ctx.countId('cherry') - 1;
+      // capped so a flood of cherries can't trivially clear the rent
+      const extra = Math.min(3, ctx.countId('cherry') - 1);
       if (extra > 0) ctx.add(extra, `+${extra} cherries`);
     },
   },
