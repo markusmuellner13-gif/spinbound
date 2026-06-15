@@ -6,6 +6,10 @@
 
   const COLS = 5, ROWS = 4, CELLS = COLS * ROWS;
   const SPINS_PER_FLOOR = 5;
+  // odds a given cell lands a symbol vs. a blank "near-miss" reel position.
+  // real slot machines show lots of blanks — this is what keeps wins gambly
+  // and stops a single spin from trivially clearing the rent.
+  const FILL_CHANCE = 0.4;
   // rent grows each floor; index 0 = floor 1
   const rentForFloor = (f) => Math.round(20 * Math.pow(1.6, f - 1) + (f - 1) * 8);
 
@@ -142,6 +146,8 @@
     const bag = S.bag;
     for (let i = 0; i < CELLS; i++) {
       if (bag.length === 0) break;
+      // each reel position can come up blank — gambly variance, slot-style
+      if (rng() >= FILL_CHANCE) continue;
       picks.push(bag[Math.floor(rng() * bag.length)]);
     }
     // place picks into random distinct cells
@@ -595,8 +601,75 @@
     meta.muted = !meta.muted; saveMeta(meta); syncMute();
     if (!meta.muted) sfx('click');
   });
-  el.lever.addEventListener('click', doSpin);
+  setupLever();
   el.coach.addEventListener('click', hideCoach);
+
+  /* ---------- lever: drag / scroll it down to spin ---------- */
+  function setupLever() {
+    const lever = el.lever;
+    const knob = lever.querySelector('.lever-knob');
+    const rod  = lever.querySelector('.lever-rod');
+    const MAX = 72;          // px of travel
+    const THRESHOLD = 42;    // pull this far down to fire the spin
+    let dragging = false, startY = 0, dy = 0, armed = false;
+
+    const setPull = (px) => {
+      const p = Math.max(0, Math.min(1, px / MAX));
+      knob.style.transition = rod.style.transition = 'none';
+      knob.style.transform = `translateX(-50%) translateY(${px}px)`;
+      rod.style.transform  = `translateX(-50%) scaleY(${1 - p * 0.72})`;
+    };
+    const clearPull = (animate) => {
+      const t = animate ? 'transform .22s cubic-bezier(.3,.6,.3,1)' : 'none';
+      knob.style.transition = rod.style.transition = t;
+      knob.style.transform = 'translateX(-50%) translateY(0)';
+      rod.style.transform  = 'translateX(-50%) scaleY(1)';
+      lever.classList.remove('dragging');
+    };
+    const fire = () => {
+      // hand off to the regular pull animation + spin
+      knob.style.transition = rod.style.transition = '';
+      knob.style.transform = rod.style.transform = '';
+      lever.classList.remove('dragging');
+      doSpin();
+    };
+
+    lever.addEventListener('pointerdown', (e) => {
+      if (S && S.spinning) return;
+      dragging = true; armed = false; startY = e.clientY; dy = 0;
+      lever.classList.add('dragging');
+      try { lever.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
+    });
+    lever.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      dy = Math.max(0, Math.min(MAX, e.clientY - startY));
+      setPull(dy);
+      if (!armed && dy >= THRESHOLD) { armed = true; sfx('tick'); haptic(15); }
+      else if (armed && dy < THRESHOLD) { armed = false; }
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { lever.releasePointerCapture(e.pointerId); } catch {}
+      // a real pull (past threshold) OR a quick tap both spin; a half-pull resets
+      if (dy >= THRESHOLD || dy < 6) fire();
+      else clearPull(true);
+    };
+    lever.addEventListener('pointerup', end);
+    lever.addEventListener('pointercancel', end);
+
+    // mouse wheel / trackpad: scroll down over the lever to spin
+    lever.addEventListener('wheel', (e) => {
+      if (e.deltaY > 0) { e.preventDefault(); doSpin(); }
+    }, { passive: false });
+
+    // keyboard accessibility (role="button")
+    lever.tabIndex = 0;
+    lever.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doSpin(); }
+    });
+  }
 
   function startRun(mode) {
     sfx('click');

@@ -322,7 +322,9 @@ body {
 /* ============================================================
    SLOT-MACHINE LEVER
    ============================================================ */
-.lever { position:relative; flex:0 0 34px; width:34px; margin-left:8px; cursor:pointer; }
+.lever { position:relative; flex:0 0 34px; width:34px; margin-left:8px; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; outline:none; }
+.lever.dragging { cursor:grabbing; }
+.lever:focus-visible { box-shadow:0 0 0 2px rgba(255,210,74,.6); border-radius:10px; }
 .lever::after { /* base housing */
   content:''; position:absolute; left:50%; bottom:2%; transform:translateX(-50%);
   width:26px; height:13%; min-height:26px; border-radius:9px;
